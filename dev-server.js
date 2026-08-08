@@ -72,7 +72,6 @@ function buildStartPrompt(summary, topics) {
 function buildFollowUpPrompt(history, summary, topics) {
   const conv = history.map(m => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.text}`).join('\n\n');
   const topicList = topics.map(t => `- Day ${t.day}: ${t.title}`).join('\n');
-
   const coverage = {};
   topics.forEach(t => { coverage[t.day] = 0; });
   history.filter(m => m.role === 'assistant').forEach(m => {
@@ -82,39 +81,45 @@ function buildFollowUpPrompt(history, summary, topics) {
       }
     });
   });
-
   const sorted = [...topics].sort((a, b) => (coverage[a.day] || 0) - (coverage[b.day] || 0));
   const next = sorted.slice(0, 2).map(t => `Day ${t.day}: ${t.title}`).join(', ');
+  const coveredCount = Object.values(coverage).filter(c => c > 0).length;
+  const userCount = history.filter(m => m.role === 'user').length;
 
-  return `Technical interview in progress.\n\n${conv}\n\nCandidate: ${summary}\n\nTopics to cover:\n${topicList}\n\nFocus NEXT on: ${next}\n\nBased on their answer: acknowledge if good then move to a NEW topic. Probe if partial. Encourage if struggling. Ask ONE question. 2-3 sentences max. You MUST cover different topics — no more than 2 questions on the same topic.`;
+  return `Technical interview in progress.\n\n${conv}\n\nCandidate: ${summary}\n\nTopics to cover:\n${topicList}\n\nTopics covered: ${coveredCount} of ${topics.length}. Questions asked: ${userCount}\n\nFocus NEXT on: ${next}\n\nBased on their answer: acknowledge if good then move to a NEW topic. Probe if partial. Encourage if struggling. Ask ONE question. 2-3 sentences max.\n\nENDING: When you have covered at least 4 topics AND asked at least 8 questions, end with a warm closing and append [DONE] at the very end of your message. Do NOT say [DONE] until you have covered at least 4 topics and asked at least 8 questions.`;
 }
 
-function buildFeedbackPrompt(history, summary) {
+function buildFeedbackPrompt(history, summary, topics) {
   const conv = history.map(m => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.text}`).join('\n\n');
-  return `Interview concluded.\n\n${conv}\n\nCandidate: ${summary}\n\nReturn ONLY a JSON object (no markdown, no thinking, no code fences):\n{"summary":"2-3 sentence assessment","strengths":["s1","s2","s3"],"gaps":["g1","g2","g3"],"next":["n1","n2","n3"]}\n\nBe specific. Reference actual topics. 3-5 items per array.`;
+  const topicsList = topics.map(t => `- Day ${t.day}: ${t.title}`).join('\n');
+  return `Interview concluded.\n\n${conv}\n\nCandidate: ${summary}\n\nTopics covered:\n${topicsList}\n\nReturn ONLY a raw JSON object (no markdown, no code fences):\n{"score":72,"recommendation":"Hire","summary":"2-3 sentence assessment","topicBreakdown":[{"topic":"Day X: Topic Name","rating":"Strong","note":"observation"}],"strengths":["s1","s2"],"gaps":["g1","g2"],"examples":[{"question":"what was asked","answer":"what they said","quality":"Strong"}],"next":["n1","n2"]}\n\nScoring: 90-100 Exceptional, 75-89 Strong, 60-74 Adequate, 40-59 Developing, 0-39 Insufficient\nRecommendation: "Strong Hire" (85+), "Hire" (70-84), "Maybe" (55-69), "No Hire" (below 55)\nRatings: Strong/Solid/Weak. Quality: Strong/Weak/Partial. Be specific, reference actual answers.`;
 }
 
 function parseFeedback(text) {
   try {
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return {
+        score: parsed.score || 50,
+        recommendation: parsed.recommendation || 'Maybe',
+        summary: parsed.summary || '',
+        topicBreakdown: parsed.topicBreakdown || [],
+        strengths: parsed.strengths || [],
+        gaps: parsed.gaps || [],
+        examples: parsed.examples || [],
+        next: parsed.next || [],
+      };
+    }
   } catch {}
-  return { summary: text, strengths: [], gaps: [], next: [] };
+  return { score: 50, recommendation: 'Maybe', summary: text, topicBreakdown: [], strengths: [], gaps: [], examples: [], next: [] };
 }
 
 async function callLLM(messages) {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${GROQ_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      temperature: 0.7,
-      max_tokens: 1024,
-    }),
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
+    body: JSON.stringify({ model: MODEL, messages, temperature: 0.7, max_tokens: 1024 }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -123,14 +128,10 @@ async function callLLM(messages) {
 
 async function callLLMWithRetry(messages, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await callLLM(messages);
-    } catch (err) {
-      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED');
-      if (isRateLimit && attempt < maxRetries) {
-        const delay = (attempt + 1) * 2000;
-        console.log(`Rate limited, retrying in ${delay}ms...`);
-        await new Promise(r => setTimeout(r, delay));
+    try { return await callLLM(messages); }
+    catch (err) {
+      if ((err.message.includes('429') || err.message.includes('RATE_LIMITED')) && attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
         continue;
       }
       throw err;
@@ -154,12 +155,12 @@ const server = http.createServer(async (req, res) => {
     const topics = selectedTopics.length > 0 ? selectedTopics : selectTopics(candidate);
     const userCount = history.filter(m => m.role === 'user').length;
 
-    // End interview
-    if (userCount >= 8 && message === '__END__') {
+    // Manual end
+    if (message === '__END__') {
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
         ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
-        { role: 'user', content: buildFeedbackPrompt(history, summary) }
+        { role: 'user', content: buildFeedbackPrompt(history, summary, topics) }
       ];
       const fb = await callLLMWithRetry(messages);
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -185,9 +186,26 @@ const server = http.createServer(async (req, res) => {
       ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
       { role: 'user', content: buildFollowUpPrompt(history, summary, topics) }
     ];
-    const reply = await callLLMWithRetry(messages);
+    let reply = await callLLMWithRetry(messages);
+
+    // Check if AI signaled done
+    const isDone = reply.includes('[DONE]');
+    if (isDone) {
+      reply = reply.replace('[DONE]', '').trim();
+      const fbMessages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+        { role: 'assistant', content: reply },
+        { role: 'user', content: buildFeedbackPrompt(history, summary, topics) }
+      ];
+      const fb = await callLLMWithRetry(fbMessages);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ reply, done: true, feedback: parseFeedback(fb), questionCount: userCount + 1 }));
+      return;
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ reply: reply.trim(), done: false, questionCount: userCount + 1, shouldEnd: userCount + 1 >= 12 }));
+    res.end(JSON.stringify({ reply: reply.trim(), done: false, questionCount: userCount + 1, shouldEnd: userCount + 1 >= 15 }));
   } catch (err) {
     console.error('API Error:', err);
     res.writeHead(500, { 'Content-Type': 'application/json' });

@@ -36,7 +36,7 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
           {theme === 'dark' ? 'Light' : 'Dark'}
         </button>
-        {questionCount >= 8 && (
+        {questionCount >= 10 && (
           <button className="end-btn" onClick={onEnd} disabled={isLoading}>
             End Interview
           </button>

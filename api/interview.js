@@ -1,5 +1,5 @@
 // /api/interview.js — Vercel Serverless Function
-// Uses Groq API (OpenAI-compatible) for fast, free interviews
+// Uses Groq API for fast, free interviews
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const MODEL = 'llama-3.3-70b-versatile';
@@ -52,7 +52,7 @@ async function callLLMWithRetry(messages, maxRetries = 2) {
     try {
       return await callLLM(messages);
     } catch (err) {
-      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED') || err.message.includes('RESOURCE_EXHAUSTED');
+      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED');
       if (isRateLimit && attempt < maxRetries) {
         const delay = (attempt + 1) * 2000;
         console.log(`Rate limited, retrying in ${delay}ms...`);
@@ -134,6 +134,10 @@ function buildFollowUpPrompt(history, candidateSummary, selectedTopics) {
   );
   const nextTopics = sortedTopics.slice(0, 2).map(t => `Day ${t.day}: ${t.title}`).join(', ');
 
+  // Count topics covered so far
+  const coveredCount = Object.values(topicCoverage).filter(c => c > 0).length;
+  const userCount = history.filter(m => m.role === 'user').length;
+
   return `You are conducting a technical interview. Here is the conversation so far:
 
 ${conversationText}
@@ -143,6 +147,9 @@ ${candidateSummary}
 
 All topics to cover in this interview:
 ${topicsList}
+
+Topics covered so far: ${coveredCount} of ${selectedTopics.length}
+Questions asked so far: ${userCount}
 
 Topics to focus on NEXT (least covered so far): ${nextTopics}
 
@@ -156,14 +163,25 @@ CRITICAL RULES:
 - Ask exactly ONE question
 - Keep response to 2-3 sentences max (excluding the question)
 - You MUST ask about different topics — do NOT stay on the same topic for more than 2 questions
-- By the end, you should have covered at least 4 different topics from the list
+
+ENDING THE INTERVIEW:
+- You MUST cover at least 4 different topics before ending
+- You MUST ask at least 8 questions total
+- When you have covered all topics AND asked at least 8 questions, end with a warm closing message
+- To signal the interview is over, end your message with exactly: [DONE]
+- Example closing: "Thank you for your time today, ${history[0]?.text?.split(' ')?.[0] || 'Candidate'}. It was a pleasure discussing your experience. [DONE]"
+- Do NOT say [DONE] until you have covered at least 4 topics and asked at least 8 questions
 - Be natural and conversational`;
 }
 
-function buildFeedbackPrompt(history, candidateSummary) {
+function buildFeedbackPrompt(history, candidateSummary, selectedTopics) {
   const conversationText = history.map(m =>
     `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.text}`
   ).join('\n\n');
+
+  const topicsList = selectedTopics.map(t =>
+    `- Day ${t.day}: ${t.title}`
+  ).join('\n');
 
   return `The interview has concluded. Here is the full conversation:
 
@@ -172,9 +190,49 @@ ${conversationText}
 Candidate profile:
 ${candidateSummary}
 
-Generate a structured interview feedback. Output ONLY the raw JSON object — no thinking, no markdown, no code fences:
-{"summary":"2-3 sentence assessment","strengths":["s1","s2","s3"],"gaps":["g1","g2","g3"],"next":["n1","n2","n3"]}
-Be specific. Reference actual topics. 3-5 items per array. START with the opening curly brace.{`;
+Topics that were covered:
+${topicsList}
+
+Generate a comprehensive interview evaluation. Output ONLY the raw JSON object — no thinking, no markdown, no code fences:
+
+{
+  "score": 72,
+  "recommendation": "Hire",
+  "summary": "2-3 sentence overall assessment of the candidate's performance",
+  "topicBreakdown": [
+    {"topic": "Day X: Topic Name", "rating": "Strong", "note": "Specific observation about their answer"}
+  ],
+  "strengths": ["s1", "s2", "s3"],
+  "gaps": ["g1", "g2"],
+  "examples": [
+    {"question": "What the interviewer asked", "answer": "What the candidate said", "quality": "Strong/Weak/Partial"}
+  ],
+  "next": ["n1", "n2"]
+}
+
+SCORING GUIDE:
+- 90-100: Exceptional — deep understanding, real-world experience, teaches concepts
+- 75-89: Strong — solid answers, good understanding, minor gaps
+- 60-74: Adequate — basic understanding, some gaps, needs mentorship
+- 40-59: Developing — partial understanding, significant gaps, needs training
+- 0-39: Insufficient — unable to demonstrate understanding
+
+RECOMMENDATION:
+- "Strong Hire" (85+): Ready for senior roles
+- "Hire" (70-84): Good fit, can grow with support
+- "Maybe" (55-69): Shows potential but needs development
+- "No Hire" (below 55): Not ready for the role
+
+RULES:
+- score must be an integer 0-100
+- recommendation must be one of: "Strong Hire", "Hire", "Maybe", "No Hire"
+- topicBreakdown must cover ALL topics that were discussed
+- Include 2-3 specific examples of questions and answers
+- Be honest and specific — reference actual things the candidate said
+- strengths: 2-4 items
+- gaps: 2-3 items
+- next: 2-3 actionable recommendations
+- START with the opening curly brace`;
 }
 
 // Curriculum data (inline for serverless)
@@ -241,13 +299,34 @@ function selectTopics(candidate, numTopics = 6) {
 function parseFeedback(text) {
   try {
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      // Ensure required fields exist
+      return {
+        score: parsed.score || 50,
+        recommendation: parsed.recommendation || 'Maybe',
+        summary: parsed.summary || '',
+        topicBreakdown: parsed.topicBreakdown || [],
+        strengths: parsed.strengths || [],
+        gaps: parsed.gaps || [],
+        examples: parsed.examples || [],
+        next: parsed.next || [],
+      };
+    }
   } catch {}
-  return { summary: text, strengths: [], gaps: [], next: [] };
+  return {
+    score: 50,
+    recommendation: 'Maybe',
+    summary: text,
+    topicBreakdown: [],
+    strengths: [],
+    gaps: [],
+    examples: [],
+    next: [],
+  };
 }
 
 const MIN_QUESTIONS = 8;
-const MAX_QUESTIONS = 12;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -266,12 +345,12 @@ export default async function handler(req, res) {
     const topics = selectedTopics.length > 0 ? selectedTopics : selectTopics(candidate);
     const userResponseCount = history.filter(m => m.role === 'user').length;
 
-    // End interview — generate feedback
-    if (userResponseCount >= MIN_QUESTIONS && message === '__END__') {
+    // Manual end — generate feedback
+    if (message === '__END__') {
       const messages = [
         { role: 'system', content: SYSTEM_PROMPT },
         ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
-        { role: 'user', content: buildFeedbackPrompt(history, candidateSummary) }
+        { role: 'user', content: buildFeedbackPrompt(history, candidateSummary, topics) }
       ];
 
       const feedbackText = await callLLMWithRetry(messages);
@@ -302,8 +381,34 @@ export default async function handler(req, res) {
       { role: 'user', content: buildFollowUpPrompt(history, candidateSummary, topics) }
     ];
 
-    const reply = await callLLMWithRetry(messages);
-    const shouldEnd = userResponseCount + 1 >= MAX_QUESTIONS;
+    let reply = await callLLMWithRetry(messages);
+
+    // Check if AI signaled interview is done
+    const isDone = reply.includes('[DONE]');
+    if (isDone) {
+      reply = reply.replace('[DONE]', '').trim();
+
+      // Generate feedback automatically
+      const feedbackMessages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+        { role: 'assistant', content: reply },
+        { role: 'user', content: buildFeedbackPrompt(history, candidateSummary, topics) }
+      ];
+
+      const feedbackText = await callLLMWithRetry(feedbackMessages);
+      const feedback = parseFeedback(feedbackText);
+
+      return res.status(200).json({
+        reply,
+        done: true,
+        feedback,
+        questionCount: userResponseCount + 1,
+      });
+    }
+
+    // Auto-force end if too many questions
+    const shouldEnd = userResponseCount + 1 >= 15;
 
     return res.status(200).json({
       reply: reply.trim(),
