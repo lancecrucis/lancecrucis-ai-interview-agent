@@ -17,7 +17,8 @@ try {
 if (!GROQ_API_KEY) { console.error('No GROQ_API_KEY found'); process.exit(1); }
 console.log('Groq API key loaded');
 
-const MODEL = 'llama-3.1-8b-instant';
+const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
+const FALLBACK_MODEL = 'llama-3.1-8b-instant';
 
 const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program. Be professional, warm, and encouraging. Ask thoughtful conversational questions, listen carefully, and ask intelligent follow-ups. Keep responses concise (2-4 sentences max). Mix conceptual and practical questions. Ask "why" questions to test depth.`;
 
@@ -115,11 +116,11 @@ function parseFeedback(text) {
   return { score: 50, recommendation: 'Maybe', summary: text, topicBreakdown: [], strengths: [], gaps: [], examples: [], next: [] };
 }
 
-async function callLLM(messages) {
+async function callLLM(messages, model = PRIMARY_MODEL) {
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${GROQ_API_KEY}` },
-    body: JSON.stringify({ model: MODEL, messages, temperature: 0.7, max_tokens: 1024 }),
+    body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 1024 }),
   });
   if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -127,10 +128,33 @@ async function callLLM(messages) {
 }
 
 async function callLLMWithRetry(messages, maxRetries = 2) {
+  // Try primary model first
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try { return await callLLM(messages); }
-    catch (err) {
-      if ((err.message.includes('429') || err.message.includes('RATE_LIMITED')) && attempt < maxRetries) {
+    try {
+      return await callLLM(messages, PRIMARY_MODEL);
+    } catch (err) {
+      const isOverloaded = err.message.includes('503') || err.message.includes('over capacity') || err.message.includes('502');
+      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED');
+
+      if (isOverloaded) {
+        console.log(`Primary model (${PRIMARY_MODEL}) overloaded, falling back to ${FALLBACK_MODEL}`);
+        break;
+      }
+      if (isRateLimit && attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  // Fallback to instant model
+  console.log(`Using fallback model: ${FALLBACK_MODEL}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callLLM(messages, FALLBACK_MODEL);
+    } catch (err) {
+      if (attempt < maxRetries) {
         await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
         continue;
       }

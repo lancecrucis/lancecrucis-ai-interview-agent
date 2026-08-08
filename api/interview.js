@@ -2,7 +2,8 @@
 // Uses Groq API for fast, free interviews
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const MODEL = 'llama-3.1-8b-instant';
+const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
+const FALLBACK_MODEL = 'llama-3.1-8b-instant';
 
 const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program. 
 
@@ -23,7 +24,7 @@ Interview style:
 - Reference specific things from their learning journey
 - Make it feel like a real conversation, not an interrogation`;
 
-async function callLLM(messages) {
+async function callLLM(messages, model = PRIMARY_MODEL) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -31,7 +32,7 @@ async function callLLM(messages) {
       'Authorization': `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       temperature: 0.7,
       max_tokens: 1024,
@@ -48,15 +49,36 @@ async function callLLM(messages) {
 }
 
 async function callLLMWithRetry(messages, maxRetries = 2) {
+  // Try primary model first
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await callLLM(messages);
+      return await callLLM(messages, PRIMARY_MODEL);
     } catch (err) {
+      const isOverloaded = err.message.includes('503') || err.message.includes('over capacity') || err.message.includes('502');
       const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED');
+
+      if (isOverloaded) {
+        console.log(`Primary model (${PRIMARY_MODEL}) overloaded, falling back to ${FALLBACK_MODEL}`);
+        break; // Exit retry loop, try fallback
+      }
       if (isRateLimit && attempt < maxRetries) {
         const delay = (attempt + 1) * 2000;
         console.log(`Rate limited, retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  // Fallback to instant model
+  console.log(`Using fallback model: ${FALLBACK_MODEL}`);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callLLM(messages, FALLBACK_MODEL);
+    } catch (err) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
         continue;
       }
       throw err;
