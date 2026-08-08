@@ -38,7 +38,7 @@ export default function CandidatePicker({ candidates, onSelect, theme, onToggleT
             <p>Select a candidate to begin a technical interview</p>
           </div>
           <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
-            {theme === 'dark' ? 'Sun' : 'Moon'}
+            {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
         </div>
         <div className="search-box">

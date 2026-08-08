@@ -34,7 +34,7 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
           <span className="header-meta">{candidate.member.jobRole}</span>
         </div>
         <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
-          {theme === 'dark' ? 'Sun' : 'Moon'}
+          {theme === 'dark' ? 'Light' : 'Dark'}
         </button>
         {questionCount >= 8 && (
           <button className="end-btn" onClick={onEnd} disabled={isLoading}>

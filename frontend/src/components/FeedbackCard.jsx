@@ -7,7 +7,7 @@ export default function FeedbackCard({ candidate, feedback, messages, onBack, th
         <div className="feedback-header-top">
           <button className="back-btn" onClick={onBack}>New Interview</button>
           <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
-            {theme === 'dark' ? 'Sun' : 'Moon'}
+            {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
         </div>
         <h1>Interview Complete</h1>
