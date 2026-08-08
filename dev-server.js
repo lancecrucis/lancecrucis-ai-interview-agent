@@ -1,4 +1,4 @@
-// dev-server.js — Local development server
+// dev-server.js — Local development server (Groq backend)
 import http from 'http';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
@@ -7,15 +7,17 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 4567;
 
-let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+let GROQ_API_KEY = process.env.GROQ_API_KEY;
 try {
   const envContent = readFileSync(join(__dirname, '.env'), 'utf8');
-  const match = envContent.match(/GEMINI_API_KEY=(.+)/);
-  if (match) GEMINI_API_KEY = match[1].trim();
+  const match = envContent.match(/GROQ_API_KEY=(.+)/);
+  if (match) GROQ_API_KEY = match[1].trim();
 } catch {}
 
-if (!GEMINI_API_KEY) { console.error('No GEMINI_API_KEY found'); process.exit(1); }
-console.log('Gemini API key loaded');
+if (!GROQ_API_KEY) { console.error('No GROQ_API_KEY found'); process.exit(1); }
+console.log('Groq API key loaded');
+
+const MODEL = 'llama-3.3-70b-versatile';
 
 const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program. Be professional, warm, and encouraging. Ask thoughtful conversational questions, listen carefully, and ask intelligent follow-ups. Keep responses concise (2-4 sentences max). Mix conceptual and practical questions. Ask "why" questions to test depth.`;
 
@@ -71,7 +73,6 @@ function buildFollowUpPrompt(history, summary, topics) {
   const conv = history.map(m => `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.text}`).join('\n\n');
   const topicList = topics.map(t => `- Day ${t.day}: ${t.title}`).join('\n');
 
-  // Track topic coverage
   const coverage = {};
   topics.forEach(t => { coverage[t.day] = 0; });
   history.filter(m => m.role === 'assistant').forEach(m => {
@@ -93,25 +94,41 @@ function buildFeedbackPrompt(history, summary) {
   return `Interview concluded.\n\n${conv}\n\nCandidate: ${summary}\n\nReturn ONLY a JSON object (no markdown, no thinking, no code fences):\n{"summary":"2-3 sentence assessment","strengths":["s1","s2","s3"],"gaps":["g1","g2","g3"],"next":["n1","n2","n3"]}\n\nBe specific. Reference actual topics. 3-5 items per array.`;
 }
 
-async function callGemini(contents, systemInstruction = null) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-  const body = { contents, generationConfig: { temperature: 0.7, topP: 0.9, maxOutputTokens: 1024 } };
-  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+function parseFeedback(text) {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch {}
+  return { summary: text, strengths: [], gaps: [], next: [] };
 }
 
-async function callGeminiWithRetry(contents, systemInstruction = null, maxRetries = 2) {
+async function callLLM(messages) {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature: 0.7,
+      max_tokens: 1024,
+    }),
+  });
+  if (!res.ok) throw new Error(`Groq ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callLLMWithRetry(messages, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await callGemini(contents, systemInstruction);
+      return await callLLM(messages);
     } catch (err) {
-      const is429 = err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED');
-      if (is429 && attempt < maxRetries) {
-        const delayMatch = err.message.match(/retryDelay.*?(\d+)/);
-        const delay = delayMatch ? parseInt(delayMatch[1]) * 1000 : (attempt + 1) * 2000;
+      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED');
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = (attempt + 1) * 2000;
         console.log(`Rate limited, retrying in ${delay}ms...`);
         await new Promise(r => setTimeout(r, delay));
         continue;
@@ -119,18 +136,6 @@ async function callGeminiWithRetry(contents, systemInstruction = null, maxRetrie
       throw err;
     }
   }
-}
-
-function toGeminiHistory(msgs) {
-  return msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : m.role, parts: [{ text: m.text }] }));
-}
-
-function parseFeedback(text) {
-  try {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-  } catch {}
-  return { summary: text, strengths: [], gaps: [], next: [] };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -151,7 +156,12 @@ const server = http.createServer(async (req, res) => {
 
     // End interview
     if (userCount >= 8 && message === '__END__') {
-      const fb = await callGeminiWithRetry([...toGeminiHistory(history), { role: 'user', parts: [{ text: buildFeedbackPrompt(history, summary) }] }]);
+      const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+        { role: 'user', content: buildFeedbackPrompt(history, summary) }
+      ];
+      const fb = await callLLMWithRetry(messages);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ reply: 'Thank you for your time. Here is your feedback:', done: true, feedback: parseFeedback(fb) }));
       return;
@@ -159,17 +169,23 @@ const server = http.createServer(async (req, res) => {
 
     // Start
     if (history.length === 0) {
-      const reply = await callGeminiWithRetry([{ role: 'user', parts: [{ text: buildStartPrompt(summary, topics) }] }], SYSTEM_PROMPT);
+      const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildStartPrompt(summary, topics) }
+      ];
+      const reply = await callLLMWithRetry(messages);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ reply: reply.trim(), done: false, selectedTopics: topics }));
       return;
     }
 
     // Follow-up
-    const gHistory = toGeminiHistory(history);
-    const prompt = buildFollowUpPrompt(history, summary, topics);
-    const contents = [...gHistory.slice(0, -1), { role: 'user', parts: [{ text: prompt }] }];
-    const reply = await callGeminiWithRetry(contents, SYSTEM_PROMPT);
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+      { role: 'user', content: buildFollowUpPrompt(history, summary, topics) }
+    ];
+    const reply = await callLLMWithRetry(messages);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ reply: reply.trim(), done: false, questionCount: userCount + 1, shouldEnd: userCount + 1 >= 12 }));
   } catch (err) {

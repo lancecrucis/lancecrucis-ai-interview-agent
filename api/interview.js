@@ -1,8 +1,8 @@
 // /api/interview.js — Vercel Serverless Function
-// Handles the interview conversation via Google Gemini API
+// Uses Groq API (OpenAI-compatible) for fast, free interviews
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-3.5-flash';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const MODEL = 'llama-3.3-70b-versatile';
 
 const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program. 
 
@@ -23,37 +23,45 @@ Interview style:
 - Reference specific things from their learning journey
 - Make it feel like a real conversation, not an interrogation`;
 
-async function callGemini(contents, systemInstruction = null) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-  const body = {
-    contents,
-    generationConfig: {
-      temperature: 0.7,
-      topP: 0.9,
-      maxOutputTokens: 1024,
-    },
-  };
-
-  if (systemInstruction) {
-    body.systemInstruction = {
-      parts: [{ text: systemInstruction }]
-    };
-  }
-
-  const response = await fetch(url, {
+async function callLLM(messages) {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature: 0.7,
+      max_tokens: 1024,
+    }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+    throw new Error(`Groq API error: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function callLLMWithRetry(messages, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callLLM(messages);
+    } catch (err) {
+      const isRateLimit = err.message.includes('429') || err.message.includes('RATE_LIMITED') || err.message.includes('RESOURCE_EXHAUSTED');
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = (attempt + 1) * 2000;
+        console.log(`Rate limited, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 function buildCandidateSummary(candidate) {
@@ -85,30 +93,6 @@ ${failed.map(x => `- Day ${x.day}: ${x.title} (${x.attempts} attempts)`).join('\
 ${skipped.map(x => `- Day ${x.day}: ${x.title}`).join('\n')}`;
 }
 
-function getTopicsCovered(history) {
-  const topics = [];
-  for (const msg of history) {
-    if (msg.role === 'user' && msg.text) {
-      // Extract day numbers mentioned in user responses
-      const matches = msg.text.match(/day\s+(\d+)/gi);
-      if (matches) {
-        matches.forEach(m => {
-          const num = parseInt(m.replace(/day\s+/i, ''));
-          if (!topics.includes(num)) topics.push(num);
-        });
-      }
-    }
-  }
-  return topics;
-}
-
-function getConversationHistory(messages) {
-  return messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : m.role,
-    parts: [{ text: m.text }]
-  }));
-}
-
 function buildStartPrompt(candidateSummary, selectedTopics) {
   const topicsList = selectedTopics.map(t =>
     `- Day ${t.day}: ${t.title} (${t.reason === 'skipped' ? 'SKIPPED' : t.reason === 'failed' ? 'FAILED' : t.reason === 'struggled' ? 'Multiple attempts' : 'Completed'})`
@@ -135,7 +119,6 @@ function buildFollowUpPrompt(history, candidateSummary, selectedTopics) {
     `- Day ${t.day}: ${t.title}`
   ).join('\n');
 
-  // Count how many AI messages mention each topic day
   const topicCoverage = {};
   selectedTopics.forEach(t => { topicCoverage[t.day] = 0; });
   history.filter(m => m.role === 'assistant').forEach(m => {
@@ -146,7 +129,6 @@ function buildFollowUpPrompt(history, candidateSummary, selectedTopics) {
     });
   });
 
-  // Find least-covered topics
   const sortedTopics = [...selectedTopics].sort((a, b) =>
     (topicCoverage[a.day] || 0) - (topicCoverage[b.day] || 0)
   );
@@ -193,25 +175,6 @@ ${candidateSummary}
 Generate a structured interview feedback. Output ONLY the raw JSON object — no thinking, no markdown, no code fences:
 {"summary":"2-3 sentence assessment","strengths":["s1","s2","s3"],"gaps":["g1","g2","g3"],"next":["n1","n2","n3"]}
 Be specific. Reference actual topics. 3-5 items per array. START with the opening curly brace.{`;
-}
-
-async function callGeminiWithRetry(contents, systemInstruction = null, maxRetries = 2) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await callGemini(contents, systemInstruction);
-    } catch (err) {
-      const is429 = err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED');
-      if (is429 && attempt < maxRetries) {
-        // Extract retry delay from error or use exponential backoff
-        const delayMatch = err.message.match(/retryDelay.*?(\d+)/);
-        const delay = delayMatch ? parseInt(delayMatch[1]) * 1000 : (attempt + 1) * 2000;
-        console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
-      throw err;
-    }
-  }
 }
 
 // Curriculum data (inline for serverless)
@@ -275,69 +238,44 @@ function selectTopics(candidate, numTopics = 6) {
   return scoredDays.slice(0, numTopics);
 }
 
+function parseFeedback(text) {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch {}
+  return { summary: text, strengths: [], gaps: [], next: [] };
+}
+
 const MIN_QUESTIONS = 8;
 const MAX_QUESTIONS = 12;
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!GROQ_API_KEY) return res.status(500).json({ error: 'GROQ_API_KEY not configured' });
 
   try {
     const { candidate, message, history = [], selectedTopics = [] } = req.body;
-
-    if (!candidate) {
-      return res.status(400).json({ error: 'candidate is required' });
-    }
+    if (!candidate) return res.status(400).json({ error: 'candidate is required' });
 
     const candidateSummary = buildCandidateSummary(candidate);
     const topics = selectedTopics.length > 0 ? selectedTopics : selectTopics(candidate);
-
-    // Count user responses (actual interview questions answered)
     const userResponseCount = history.filter(m => m.role === 'user').length;
 
-    // Check if interview is complete
+    // End interview — generate feedback
     if (userResponseCount >= MIN_QUESTIONS && message === '__END__') {
-      // Generate feedback
-      const feedbackPrompt = buildFeedbackPrompt(history, candidateSummary);
-      const geminiHistory = getConversationHistory(history);
+      const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+        { role: 'user', content: buildFeedbackPrompt(history, candidateSummary) }
+      ];
 
-      const feedbackText = await callGeminiWithRetry([
-        ...geminiHistory,
-        { role: 'user', parts: [{ text: feedbackPrompt }] }
-      ]);
-
-      let feedback;
-      try {
-        // Try to extract JSON from the response
-        const jsonMatch = feedbackText.match(/\{[\s\S]*\}/);
-        feedback = jsonMatch ? JSON.parse(jsonMatch[0]) : {
-          summary: feedbackText,
-          strengths: [],
-          gaps: [],
-          next: []
-        };
-      } catch {
-        feedback = {
-          summary: feedbackText,
-          strengths: [],
-          gaps: [],
-          next: []
-        };
-      }
+      const feedbackText = await callLLMWithRetry(messages);
+      const feedback = parseFeedback(feedbackText);
 
       return res.status(200).json({
         reply: 'Thank you for your time today. It was a pleasure interviewing you. Here is your feedback:',
@@ -346,38 +284,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Build conversation for Gemini
-    const geminiHistory = getConversationHistory(history);
-
+    // Start interview
     if (history.length === 0) {
-      // First message — start the interview
-      const startPrompt = buildStartPrompt(candidateSummary, topics);
-      const reply = await callGeminiWithRetry([
-        { role: 'user', parts: [{ text: startPrompt }] }
-      ], SYSTEM_PROMPT);
+      const messages = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildStartPrompt(candidateSummary, topics) }
+      ];
 
-      return res.status(200).json({
-        reply: reply.trim(),
-        done: false,
-        selectedTopics: topics
-      });
+      const reply = await callLLMWithRetry(messages);
+      return res.status(200).json({ reply: reply.trim(), done: false, selectedTopics: topics });
     }
 
-    // Follow-up — continue conversation
-    const followUpPrompt = buildFollowUpPrompt(history, candidateSummary, topics);
-
-    // Add the prompt as the last user message context
-    const contents = [
-      ...geminiHistory.slice(0, -1), // all but last
-      {
-        role: 'user',
-        parts: [{ text: `${followUpPrompt}\n\n---\nIMPORTANT: Your response must be ONLY the next interview message. Do NOT include any JSON, labels, or formatting. Just speak naturally as the interviewer.` }]
-      }
+    // Follow-up
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
+      { role: 'user', content: buildFollowUpPrompt(history, candidateSummary, topics) }
     ];
 
-    const reply = await callGeminiWithRetry(contents, SYSTEM_PROMPT);
-
-    // Check if we should suggest ending
+    const reply = await callLLMWithRetry(messages);
     const shouldEnd = userResponseCount + 1 >= MAX_QUESTIONS;
 
     return res.status(200).json({
@@ -389,9 +314,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Interview API error:', error);
-    return res.status(500).json({
-      error: 'Interview processing failed',
-      message: error.message
-    });
+    return res.status(500).json({ error: 'Interview processing failed', message: error.message });
   }
 }
