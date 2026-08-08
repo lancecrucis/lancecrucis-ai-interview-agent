@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 
-export default function ChatWindow({ candidate, messages, isLoading, onSend, onEnd, onBack, selectedTopics }) {
+export default function ChatWindow({ candidate, messages, isLoading, onSend, onEnd, onBack, selectedTopics, theme, onToggleTheme }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -33,6 +33,9 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
           <h2>{candidate.member.name}</h2>
           <span className="header-meta">{candidate.member.jobRole}</span>
         </div>
+        <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+          {theme === 'dark' ? 'Sun' : 'Moon'}
+        </button>
         {questionCount >= 8 && (
           <button className="end-btn" onClick={onEnd} disabled={isLoading}>
             End Interview

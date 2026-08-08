@@ -103,6 +103,24 @@ async function callGemini(contents, systemInstruction = null) {
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+async function callGeminiWithRetry(contents, systemInstruction = null, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callGemini(contents, systemInstruction);
+    } catch (err) {
+      const is429 = err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED');
+      if (is429 && attempt < maxRetries) {
+        const delayMatch = err.message.match(/retryDelay.*?(\d+)/);
+        const delay = delayMatch ? parseInt(delayMatch[1]) * 1000 : (attempt + 1) * 2000;
+        console.log(`Rate limited, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 function toGeminiHistory(msgs) {
   return msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : m.role, parts: [{ text: m.text }] }));
 }
@@ -133,7 +151,7 @@ const server = http.createServer(async (req, res) => {
 
     // End interview
     if (userCount >= 8 && message === '__END__') {
-      const fb = await callGemini([...toGeminiHistory(history), { role: 'user', parts: [{ text: buildFeedbackPrompt(history, summary) }] }]);
+      const fb = await callGeminiWithRetry([...toGeminiHistory(history), { role: 'user', parts: [{ text: buildFeedbackPrompt(history, summary) }] }]);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ reply: 'Thank you for your time. Here is your feedback:', done: true, feedback: parseFeedback(fb) }));
       return;
@@ -141,7 +159,7 @@ const server = http.createServer(async (req, res) => {
 
     // Start
     if (history.length === 0) {
-      const reply = await callGemini([{ role: 'user', parts: [{ text: buildStartPrompt(summary, topics) }] }], SYSTEM_PROMPT);
+      const reply = await callGeminiWithRetry([{ role: 'user', parts: [{ text: buildStartPrompt(summary, topics) }] }], SYSTEM_PROMPT);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ reply: reply.trim(), done: false, selectedTopics: topics }));
       return;
@@ -151,7 +169,7 @@ const server = http.createServer(async (req, res) => {
     const gHistory = toGeminiHistory(history);
     const prompt = buildFollowUpPrompt(history, summary, topics);
     const contents = [...gHistory.slice(0, -1), { role: 'user', parts: [{ text: prompt }] }];
-    const reply = await callGemini(contents, SYSTEM_PROMPT);
+    const reply = await callGeminiWithRetry(contents, SYSTEM_PROMPT);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ reply: reply.trim(), done: false, questionCount: userCount + 1, shouldEnd: userCount + 1 >= 12 }));
   } catch (err) {

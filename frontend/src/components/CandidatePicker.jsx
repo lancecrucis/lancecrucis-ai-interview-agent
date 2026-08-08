@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function CandidatePicker({ candidates, onSelect }) {
+export default function CandidatePicker({ candidates, onSelect, theme, onToggleTheme }) {
   const [search, setSearch] = useState('')
 
   const filtered = candidates.filter(c => {
@@ -32,8 +32,15 @@ export default function CandidatePicker({ candidates, onSelect }) {
   return (
     <div className="picker">
       <div className="picker-header">
-        <h1>Interview Agent</h1>
-        <p>Select a candidate to begin a technical interview</p>
+        <div className="picker-header-top">
+          <div>
+            <h1>Interview Agent</h1>
+            <p>Select a candidate to begin a technical interview</p>
+          </div>
+          <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+            {theme === 'dark' ? 'Sun' : 'Moon'}
+          </button>
+        </div>
         <div className="search-box">
           <input
             type="text"

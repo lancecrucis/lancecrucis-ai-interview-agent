@@ -1,10 +1,15 @@
-export default function FeedbackCard({ candidate, feedback, messages, onBack }) {
+export default function FeedbackCard({ candidate, feedback, messages, onBack, theme, onToggleTheme }) {
   const questionCount = messages.filter(m => m.role === 'user').length
 
   return (
     <div className="feedback-page">
       <div className="feedback-header">
-        <button className="back-btn" onClick={onBack}>New Interview</button>
+        <div className="feedback-header-top">
+          <button className="back-btn" onClick={onBack}>New Interview</button>
+          <button className="theme-toggle" onClick={onToggleTheme} title="Toggle theme">
+            {theme === 'dark' ? 'Sun' : 'Moon'}
+          </button>
+        </div>
         <h1>Interview Complete</h1>
         <p>{candidate.member.name} answered {questionCount} questions</p>
       </div>

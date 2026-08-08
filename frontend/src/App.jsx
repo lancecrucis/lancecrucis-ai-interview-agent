@@ -1,9 +1,16 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import CandidatePicker from './components/CandidatePicker'
 import ChatWindow from './components/ChatWindow'
 import FeedbackCard from './components/FeedbackCard'
 import candidatesData from './data/candidates.json'
 import './App.css'
+
+function handleApiError(errorStr) {
+  if (errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED')) {
+    return 'Rate limit reached. Please wait a moment and try again.'
+  }
+  return errorStr
+}
 
 function App() {
   const [selectedCandidate, setSelectedCandidate] = useState(null)
@@ -12,6 +19,14 @@ function App() {
   const [feedback, setFeedback] = useState(null)
   const [selectedTopics, setSelectedTopics] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => setTheme(t => t === 'light' ? 'dark' : 'light')
 
   const handleSelectCandidate = (candidate) => {
     setSelectedCandidate(candidate)
@@ -36,7 +51,7 @@ function App() {
       })
 
       const data = await response.json()
-      if (data.error) throw new Error(data.error)
+      if (data.error) throw new Error(handleApiError(data.error))
 
       setMessages([{ role: 'assistant', text: data.reply }])
       if (data.selectedTopics) setSelectedTopics(data.selectedTopics)
@@ -48,7 +63,6 @@ function App() {
   }
 
   const handleSendMessage = async (text) => {
-    // Handle start signal
     if (text === '__START__') {
       return handleStartInterview()
     }
@@ -71,7 +85,7 @@ function App() {
       })
 
       const data = await response.json()
-      if (data.error) throw new Error(data.error)
+      if (data.error) throw new Error(handleApiError(data.error))
 
       setMessages(prev => [...prev, { role: 'assistant', text: data.reply }])
 
@@ -80,9 +94,7 @@ function App() {
         setFeedback(data.feedback)
       }
 
-      // Auto-end after max questions
       if (data.shouldEnd && !isInterviewDone) {
-        // Send end signal
         setTimeout(() => handleEndInterview([...newMessages, { role: 'assistant', text: data.reply }]), 500)
       }
     } catch (err) {
@@ -107,7 +119,7 @@ function App() {
       })
 
       const data = await response.json()
-      if (data.error) throw new Error(data.error)
+      if (data.error) throw new Error(handleApiError(data.error))
 
       setMessages(prev => [...prev, { role: 'assistant', text: data.reply }])
       setIsInterviewDone(true)
@@ -133,6 +145,8 @@ function App() {
         <CandidatePicker
           candidates={candidatesData.candidates}
           onSelect={handleSelectCandidate}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       ) : !isInterviewDone ? (
         <ChatWindow
@@ -143,6 +157,8 @@ function App() {
           onEnd={() => handleEndInterview()}
           onBack={handleBack}
           selectedTopics={selectedTopics}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       ) : (
         <FeedbackCard
@@ -150,6 +166,8 @@ function App() {
           feedback={feedback}
           messages={messages}
           onBack={handleBack}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       )}
     </div>

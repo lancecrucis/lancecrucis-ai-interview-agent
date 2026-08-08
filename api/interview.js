@@ -195,6 +195,25 @@ Generate a structured interview feedback. Output ONLY the raw JSON object — no
 Be specific. Reference actual topics. 3-5 items per array. START with the opening curly brace.{`;
 }
 
+async function callGeminiWithRetry(contents, systemInstruction = null, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callGemini(contents, systemInstruction);
+    } catch (err) {
+      const is429 = err.message.includes('429') || err.message.includes('RESOURCE_EXHAUSTED');
+      if (is429 && attempt < maxRetries) {
+        // Extract retry delay from error or use exponential backoff
+        const delayMatch = err.message.match(/retryDelay.*?(\d+)/);
+        const delay = delayMatch ? parseInt(delayMatch[1]) * 1000 : (attempt + 1) * 2000;
+        console.log(`Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // Curriculum data (inline for serverless)
 const curriculumDays = [
   { day: 1, title: "VS Code & Python Environment Setup", type: "SETUP" },
@@ -296,7 +315,7 @@ export default async function handler(req, res) {
       const feedbackPrompt = buildFeedbackPrompt(history, candidateSummary);
       const geminiHistory = getConversationHistory(history);
 
-      const feedbackText = await callGemini([
+      const feedbackText = await callGeminiWithRetry([
         ...geminiHistory,
         { role: 'user', parts: [{ text: feedbackPrompt }] }
       ]);
@@ -333,7 +352,7 @@ export default async function handler(req, res) {
     if (history.length === 0) {
       // First message — start the interview
       const startPrompt = buildStartPrompt(candidateSummary, topics);
-      const reply = await callGemini([
+      const reply = await callGeminiWithRetry([
         { role: 'user', parts: [{ text: startPrompt }] }
       ], SYSTEM_PROMPT);
 
@@ -356,7 +375,7 @@ export default async function handler(req, res) {
       }
     ];
 
-    const reply = await callGemini(contents, SYSTEM_PROMPT);
+    const reply = await callGeminiWithRetry(contents, SYSTEM_PROMPT);
 
     // Check if we should suggest ending
     const shouldEnd = userResponseCount + 1 >= MAX_QUESTIONS;
