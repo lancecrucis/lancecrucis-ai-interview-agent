@@ -12,12 +12,12 @@ export default function CandidatePicker({ candidates, onSelect }) {
     )
   })
 
-  const getStatusColor = (candidate) => {
+  const getPerformanceLevel = (candidate) => {
     const signals = candidate.signals || {}
     const ratio = (signals.missionsFirstTry || 0) / Math.max(signals.missionsCompleted || 1, 1)
-    if (ratio > 0.8) return '#10b981' // green - excellent
-    if (ratio > 0.5) return '#f59e0b' // yellow - good
-    return '#ef4444' // red - needs work
+    if (ratio > 0.8) return 'excellent'
+    if (ratio > 0.5) return 'good'
+    return 'needs-work'
   }
 
   const getStats = (candidate) => {
@@ -32,12 +32,12 @@ export default function CandidatePicker({ candidates, onSelect }) {
   return (
     <div className="picker">
       <div className="picker-header">
-        <h1>🎓 AI Interview Agent</h1>
-        <p>Select a candidate to begin the interview</p>
+        <h1>Interview Agent</h1>
+        <p>Select a candidate to begin a technical interview</p>
         <div className="search-box">
           <input
             type="text"
-            placeholder="Search by name, role, or ID..."
+            placeholder="Search candidates..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -47,25 +47,25 @@ export default function CandidatePicker({ candidates, onSelect }) {
       <div className="candidate-grid">
         {filtered.map(candidate => {
           const stats = getStats(candidate)
+          const level = getPerformanceLevel(candidate)
           return (
-            <div
+            <button
               key={candidate.member.id}
-              className="candidate-card"
+              className={`candidate-card ${level}`}
               onClick={() => onSelect(candidate)}
             >
-              <div className="card-header">
-                <div className="avatar" style={{ backgroundColor: getStatusColor(candidate) }}>
-                  {candidate.member.name.split(' ').map(n => n[0]).join('')}
-                </div>
-                <div className="card-info">
+              <div className="card-top">
+                <div className="card-identity">
                   <h3>{candidate.member.name}</h3>
-                  <span className="role">{candidate.member.jobRole}</span>
+                  <span className="card-role">{candidate.member.jobRole}</span>
                 </div>
+                <span className="card-id">{candidate.member.id}</span>
               </div>
+
               <div className="card-stats">
                 <div className="stat">
                   <span className="stat-value">{stats.completed}</span>
-                  <span className="stat-label">Missions</span>
+                  <span className="stat-label">Completed</span>
                 </div>
                 <div className="stat">
                   <span className="stat-value">{stats.firstTry}</span>
@@ -76,18 +76,21 @@ export default function CandidatePicker({ candidates, onSelect }) {
                   <span className="stat-label">Experience</span>
                 </div>
               </div>
-              <div className="card-meta">
-                <span>{candidate.member.education}</span>
-                <span className="id-badge">{candidate.member.id}</span>
+
+              <div className="card-footer">
+                <span className="card-edu">{candidate.member.education}</span>
+                <span className={`performance-badge ${level}`}>
+                  {level === 'excellent' ? 'Strong' : level === 'good' ? 'Solid' : 'Developing'}
+                </span>
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
 
       {filtered.length === 0 && (
         <div className="no-results">
-          <p>No candidates found matching "{search}"</p>
+          No candidates found for "{search}"
         </div>
       )}
     </div>
