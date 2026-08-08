@@ -1,112 +1,54 @@
-# AI Usage Log — AI Interview Agent
+# AI Usage Log
 
-This document tracks all AI-assisted prompts and code generation used during the development of this project.
+This document tracks AI prompts used during development.
 
----
+## Interview System Prompts
 
-## Project: AI Interview Agent
+### System Prompt (Interviewer Persona)
+```
+You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program.
+Be professional, warm, and encouraging. Ask thoughtful conversational questions.
+Listen carefully and ask intelligent follow-ups. Keep responses concise (2-4 sentences max).
+Mix conceptual and practical questions. Ask "why" questions to test depth.
+```
 
-**Developer:** Lance Christian C. Crucis  
-**Date:** August 9, 2026  
-**AI Tools Used:** Hermes Agent (Nous Research), Google Gemini 3.5 Flash
+### Start Prompt
+```
+Interview a candidate with their profile and focus areas (priority topics based on skipped/failed missions).
+Start with a brief warm welcome. Then ask your FIRST question on a priority topic. ONE question at a time.
+```
 
----
+### Follow-Up Prompt
+```
+Technical interview in progress. Based on their answer: acknowledge if good then move to a NEW topic.
+Probe if partial. Encourage if struggling. Ask ONE question. 2-3 sentences max.
+Cover different topics — no more than 2 questions on the same topic.
+```
 
-## Prompts & Interactions
+### Feedback Prompt
+```
+Interview concluded. Return ONLY a JSON object:
+{"summary":"assessment","strengths":["s1","s2"],"gaps":["g1","g2"],"next":["n1","n2"]}
+Be specific. Reference actual topics. 3-5 items per array.
+```
 
-### 1. Project Setup
-**Prompt:** "Can you check the folder in my desktop called ai interview agent"  
-**AI Action:** Scanned the project folder, read all files (candidates.json, curriculum.json, problem statement, technical spec), provided a full project overview and architecture recommendations.
+## Development Prompts Used
 
-### 2. Architecture Planning
-**Prompt:** "like how, you will build it while i open it on vs code? and also what is the plan what tech stack do we use for this"  
-**AI Action:** Recommended tech stack (Python FastAPI + React + OpenAI/Gemini), designed system architecture, created project structure plan.
+### Project Architecture
+- "Build an AI Interview Agent web app with React frontend and Node.js serverless backend"
+- "Use Google Gemini API for LLM calls, deploy to Vercel"
+- "Create interview engine with topic selection, follow-up generation, and structured feedback"
 
-### 3. LLM Selection
-**Prompt:** "but can you tell me what you will do first before you build"  
-**AI Action:** Created detailed 9-step build plan with time estimates for each phase.
+### Frontend Components
+- "Build candidate picker with search, chat window with typing indicator, feedback card"
+- "Add dark mode toggle with CSS custom properties"
+- "Minimalist white theme inspired by Mobbin/Linear design"
 
-### 4. Code Generation — Interview Engine
-**AI Action:** Generated `src/lib/interviewEngine.js` — core logic for topic selection, candidate analysis, and interview state management. Includes:
-- Topic scoring algorithm (failed > skipped > struggled > moderate > strong)
-- Module diversity constraint (max 2 topics per module)
-- Candidate summary builder
+### Bug Fixes
+- "Add retry with exponential backoff for Gemini 429 rate limits"
+- "Show user-friendly error messages for API failures"
+- "Fix dark mode button colors using theme-aware CSS variables"
 
-### 5. Code Generation — System Prompts
-**AI Action:** Generated `src/lib/prompts.js` — all LLM prompts for the interviewer persona, start prompt, follow-up prompt, and feedback generation prompt.
-
-### 6. Code Generation — API Endpoint
-**AI Action:** Generated `api/interview.js` — Vercel serverless function handling the full interview flow:
-- POST /api/interview endpoint
-- Gemini API integration (raw HTTP calls)
-- Start, follow-up, and feedback generation flows
-- CORS handling
-
-### 7. Code Generation — Frontend Components
-**AI Action:** Generated all React components:
-- `CandidatePicker.jsx` — Grid of 20 candidates with search, stats, color-coded performance
-- `ChatWindow.jsx` — Chat interface with typing indicators, topic chips, end interview button
-- `FeedbackCard.jsx` — Structured feedback display with summary, strengths, gaps, next steps
-
-### 8. Code Generation — Styling
-**AI Action:** Generated `App.css` — Complete dark theme styling with:
-- CSS custom properties for theming
-- Responsive grid layout
-- Chat bubble design
-- Typing animation
-- Mobile-responsive breakpoints
-
-### 9. Code Generation — Local Dev Server
-**AI Action:** Generated `dev-server.js` — Complete local development server that mirrors the Vercel API, allowing testing without deployment.
-
-### 10. API Key Troubleshooting
-**Prompt:** User provided Gemini API key  
-**AI Action:** Tested the API key, discovered quota issues with gemini-2.0-flash, identified working model (gemini-3.5-flash), updated all references.
-
-### 11. Bug Fixes
-**AI Action:** 
-- Fixed START button not triggering interview start (__START__ handling)
-- Added topic rotation logic to ensure questions cover 4+ curriculum days
-- Fixed feedback JSON parsing (model was outputting thinking text)
-- Updated prompts to prevent model from including thinking in responses
-
-### 12. Project Evaluation
-**Prompt:** "based on the criteria of the hackathon and rules judge them"  
-**AI Action:** Conducted thorough self-evaluation against hackathon rubric, identified 8 critical gaps, created prioritized fix list.
-
----
-
-## AI-Generated Code Summary
-
-| File | Lines | Description |
-|------|-------|-------------|
-| `api/interview.js` | ~380 | Vercel serverless API endpoint |
-| `dev-server.js` | ~165 | Local development server |
-| `src/lib/interviewEngine.js` | ~120 | Core interview logic |
-| `src/lib/prompts.js` | ~100 | LLM prompt templates |
-| `src/App.jsx` | ~155 | Main React application |
-| `src/components/CandidatePicker.jsx` | ~90 | Candidate selection UI |
-| `src/components/ChatWindow.jsx` | ~115 | Chat interface |
-| `src/components/FeedbackCard.jsx` | ~70 | Feedback display |
-| `src/App.css` | ~350 | Complete styling |
-
-**Total AI-Assisted Code: ~1,545 lines**
-
----
-
-## Manual Edits & Customization
-
-- Candidate data structure adapted from provided JSON
-- Curriculum topics mapped and scored for interview relevance
-- Topic rotation algorithm designed for maximum coverage
-- Feedback format aligned with hackathon requirements
-- UI/UX decisions (dark theme, chat bubbles, responsive layout)
-
----
-
-## AI Model Used for Interviews (Production)
-
-- **Model:** Google Gemini 3.5 Flash
-- **Temperature:** 0.7
-- **Max Tokens:** 1024
-- **Purpose:** Generate interview questions, follow-ups, and feedback
+## AI Models Used
+- **Google Gemini 3.5 Flash** — Interview conversations and feedback generation
+- **Claude (Hermes Agent)** — Code generation, debugging, and architecture decisions
