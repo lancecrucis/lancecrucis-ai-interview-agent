@@ -1,0 +1,186 @@
+﻿Every prompt i make put it on a PROMPTS.md
+
+
+
+
+
+
+The Interview Agent
+Build the interviewer, not the interview.
+
+
+The Situation
+The AI Cohort is a 31-day enterprise AI engineering program covering modern AI topics including:
+
+
+Retrieval-Augmented Generation (RAG)
+Vector Databases
+Prompt Engineering
+Agentic AI
+Model Context Protocol (MCP)
+AI Deployment
+Production AI Systems
+After completing the cohort, learners should be able to confidently explain the systems they built and the engineering decisions behind them.
+
+
+However, preparing for technical interviews and effectively communicating this knowledge remains one of the biggest challenges.
+
+
+Your task is to build an AI Interview Agent that conducts personalized technical interviews based on a candidate's learning journey throughout the cohort.
+
+
+Your Challenge
+Design and build an AI agent capable of conducting a realistic, multi-turn technical interview.
+
+
+The interview should:
+
+
+Assess the candidate's understanding of the concepts they have completed.
+Adapt naturally throughout the conversation.
+Ask intelligent follow-up questions.
+Maintain context across the interview.
+Provide actionable feedback at the end.
+The overall experience should resemble a real technical interview rather than a scripted questionnaire.
+
+
+What You're Given
+Every team will receive the following resources:
+
+
+1. Curriculum
+A structured JSON containing the complete 31-day AI Cohort curriculum, including:
+
+
+Modules
+Daily topics
+Learning objectives
+Tools used throughout the program
+2. Candidate Profiles
+A collection of candidate profiles describing each participant's progress through the cohort, including:
+
+
+Completed missions
+Attempts
+Skipped topics
+Learning signals
+3. Technical Specification
+A separate document defining:
+
+
+Required API contract
+Submission requirements
+Request/response formats
+Minimum Requirements
+Your solution must:
+
+
+Conduct a conversational technical interview.
+Ask a minimum of 8 questions covering at least 4 different curriculum days.
+Generate follow-up questions based on previous responses.
+Maintain conversation context throughout the interview.
+Produce structured feedback at the end of the interview.
+Expose the required HTTP endpoint defined in the Technical Specification.
+You are free to choose any:
+
+
+AI models
+Frameworks
+Agent orchestration strategy
+Retrieval pipeline
+System architecture
+Out of Scope
+The following are not required:
+
+
+Voice interaction
+User authentication
+Persistent user accounts
+Long-term conversation history
+Mobile applications
+Notes
+All curriculum and candidate data provided for this challenge are synthetic and intended solely for the hackathon.
+Teams may use any AI models, agent frameworks, vector databases, or supporting technologies.
+Creativity in interview flow, reasoning, interaction design, and overall user experience is highly encouraged.
+Attached Resources
+Curriculum JSON
+Candidate Profiles
+Technical Specification
+
+
+
+
+RULES
+Hackathon Rules and Evaluation Process
+To ensure a fair competition, every submission goes through a four-stage evaluation process. Automated verification is completed before judging so that judges only review valid submissions.
+
+
+1
+Stage 1: Eligibility Verification
+Automatic Verification | Pass / Fail
+
+
+All submissions are automatically verified during submission and rechecked after the submission deadline.
+
+
+A submission must satisfy all of the following requirements:
+
+
+Repository must be publicly accessible.
+Repository URL must be valid and accessible.
+Live Demo URL must be functional and return a working application.
+AI Usage Log must be included and accessible.
+Submission must belong to a registered team.
+Submission must be received before the official deadline.
+Any submission that fails one or more of the above requirements will not proceed to judging.
+
+
+2
+Stage 2: Authenticity Review
+Automated Analysis + Manual Review
+
+
+This stage verifies that the project was genuinely created during the hackathon.
+
+
+The following indicators may trigger a manual review or even disqualification:
+
+
+Repository was created before the official hackathon kickoff.
+The first commit already contains most of the project, indicating an imported codebase.
+Commit history shows little or no development activity during the hackathon, followed by a large final commit.
+The AI Usage Log does not reasonably correspond to the implemented features.
+Prompt history appears incomplete, generic, or unrelated to the submitted project.
+3
+Stage 3: Project Judging
+Two Independent Judges | 100 Points
+
+
+Eligible submissions are evaluated independently by the judges using the published judging rubric.
+
+
+Each judge scores the project separately.
+Judges do not see each other's scores.
+The final score is the average of both judges' scores.
+If the difference between the two scores exceeds 15 points, a third judge will evaluate the project.
+In such cases, the median score of the three judges becomes the final score.
+Only submissions that successfully complete Stages 1 and 2 are evaluated by judges.
+
+
+4
+Stage 4: Live Steer Challenge
+Final Round | Top 6 Teams
+
+
+The six highest-scoring teams qualify for the Live Steer Challenge.
+
+
+Each finalist team will:
+
+
+Join a live video call.
+Share their screen throughout the challenge.
+Receive the same previously unseen feature request.
+Implement the feature within 20 minutes using their own repository.
+Use any AI tools they used during the hackathon.
+The Live Steer Challenge ensures that finalists can demonstrate the same AI-assisted development skills used throughout the hackathon.
