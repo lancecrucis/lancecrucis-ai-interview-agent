@@ -96,7 +96,81 @@ body {
   background: var(--gray-50);
 }
 
-/* ===== PICKER ===== */
+/* ===== PICKER CONTROLS ===== */
+.picker-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-400);
+  flex-shrink: 0;
+}
+
+.control-select {
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--gray-700);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+  font-family: inherit;
+}
+
+.control-select:focus {
+  border-color: var(--gray-400);
+}
+
+.filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 5px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.filter-pill:hover {
+  border-color: var(--gray-400);
+  color: var(--gray-700);
+}
+
+.filter-pill.active {
+  background: var(--gray-900);
+  color: white;
+  border-color: var(--gray-900);
+}
+
+.picker-results {
+  font-size: 0.75rem;
+  color: var(--gray-400);
+}
+
+/* ===== PICKER HEADER ===== */
 .picker {
   max-width: 1120px;
   margin: 0 auto;
@@ -231,7 +305,46 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
+
+/* ===== MISSION BAR ===== */
+.card-missions {
+  margin-bottom: 12px;
+}
+
+.mission-bar {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--gray-100);
+  margin-bottom: 6px;
+}
+
+.mission-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.mission-segment.passed { background: var(--success); }
+.mission-segment.failed { background: #dc2626; }
+.mission-segment.skipped { background: var(--gray-300); }
+
+.mission-legend {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  font-size: 0.625rem;
+  color: var(--gray-400);
+}
+
+.legend-item.passed::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--success); margin-right: 3px; vertical-align: middle; }
+.legend-item.failed::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #dc2626; margin-right: 3px; vertical-align: middle; }
+.legend-item.skipped::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--gray-300); margin-right: 3px; vertical-align: middle; }
 
 .card-edu {
   font-size: 0.75rem;
