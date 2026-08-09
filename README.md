@@ -53,8 +53,8 @@ The AI Interview Agent analyzes a candidate's learning journey and conducts a re
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/lancecrucis/ai-interview-agent.git
-cd ai-interview-agent
+git clone https://github.com/lancecrucis/lancecrucis-ai-interview-agent.git
+cd lancecrucis-ai-interview-agent
 ```
 
 2. Install dependencies:
