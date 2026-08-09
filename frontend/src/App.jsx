@@ -36,8 +36,11 @@ function App() {
     setSelectedTopics([])
   }
 
+  const thinkingDelay = () => new Promise(r => setTimeout(r, 1500 + Math.random() * 1500))
+
   const handleStartInterview = async () => {
     setIsLoading(true)
+    await thinkingDelay() // Simulate interviewer reading profile
     try {
       const response = await fetch('/api/interview', {
         method: 'POST',
@@ -71,6 +74,7 @@ function App() {
     const newMessages = [...messages, userMessage]
     setMessages(newMessages)
     setIsLoading(true)
+    await thinkingDelay() // Simulate interviewer reading answer and thinking
 
     try {
       const response = await fetch('/api/interview', {
@@ -106,6 +110,7 @@ function App() {
 
   const handleEndInterview = async (currentMessages) => {
     setIsLoading(true)
+    await thinkingDelay() // Simulate interviewer wrapping up
     try {
       const response = await fetch('/api/interview', {
         method: 'POST',

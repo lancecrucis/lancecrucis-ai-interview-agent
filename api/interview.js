@@ -272,25 +272,33 @@ ${topicsList}
 
 Topics covered so far: ${coveredCount} of ${selectedTopics.length}
 Questions asked so far: ${userCount}
+Questions remaining: approximately ${Math.max(0, 12 - userCount)} more questions
 Current difficulty level: ${state.difficulty}
 
 Topics to focus on NEXT (least covered so far): ${nextTopics}
 
 ${adaptiveInstructions}
 
-CRITICAL RULES:
-- Ask exactly ONE question
-- Keep response to 2-3 sentences max (excluding the question)
-- You MUST ask about different topics — do NOT stay on the same topic for more than 2 questions
+FLOW RULES — Make it feel like a real interview:
+- Sometimes go DEEP on an answer (ask "why", "how would you handle edge cases", "what if...")
+- Sometimes move QUICKLY to the next topic if the answer is thorough
+- Vary your response length: sometimes 1 sentence, sometimes 3-4 sentences
+- If the answer is shallow or vague, PROBE: "Can you elaborate on that?" or "What specifically would you do?"
+- If the answer is strong, acknowledge it briefly and move on
+- Occasionally reference something they said earlier: "That connects to what you mentioned about X..."
+- Be warm and human. Use phrases like "Interesting", "Good point", "Let me ask you about..."
+- If you notice the candidate is struggling, say something like "No worries, let me rephrase that"
+- Track how many questions remain and occasionally tell the user: "I have about X more questions" or "Let's cover a couple more topics"
+- Do NOT ask "What do you know about X?" — instead ask scenario-based or "why" questions
+- Do NOT end with [DONE] until you have covered at least 4 topics AND asked at least 8 questions
+- When you ARE done, say a warm goodbye and append [DONE]
 
 ENDING THE INTERVIEW:
 - You MUST cover at least 4 different topics before ending
 - You MUST ask at least 8 questions total
-- When you have covered all topics AND asked at least 8 questions, end with a warm closing message
-- To signal the interview is over, end your message with exactly: [DONE]
-- Example closing: "Thank you for your time today. It was a pleasure discussing your experience. [DONE]"
-- Do NOT say [DONE] until you have covered at least 4 topics and asked at least 8 questions
-- Be natural and conversational`;
+- When you have covered all topics AND asked at least 8 questions, end naturally
+- Example: "I think we've covered everything I wanted to discuss. Thank you for your time today — it was great hearing about your experience with the cohort. [DONE]"
+- Do NOT say [DONE] until you have covered at least 4 topics and asked at least 8 questions`;
 }
 
 function buildFeedbackPrompt(history, candidateSummary, selectedTopics) {
