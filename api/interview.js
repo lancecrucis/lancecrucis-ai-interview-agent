@@ -1,11 +1,11 @@
 // /api/interview.js — Vercel Serverless Function
-// Uses Groq API for fast, free interviews
+// Uses Groq API with auto-fallback for fast, free interviews
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const PRIMARY_MODEL = 'llama-3.3-70b-versatile';
 const FALLBACK_MODEL = 'llama-3.1-8b-instant';
 
-const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program. 
+const SYSTEM_PROMPT = `You are a senior AI engineer conducting a technical interview for a graduate of a 31-day AI Cohort program.
 
 Your role:
 - Be professional, warm, and encouraging — like a real senior engineer at a tech company
@@ -22,7 +22,15 @@ Interview style:
 - Mix conceptual questions ("What is X?") with practical questions ("How would you implement Y?")
 - Ask "why" questions to test depth of understanding
 - Reference specific things from their learning journey
-- Make it feel like a real conversation, not an interrogation`;
+- Make it feel like a real conversation, not an interrogation
+
+CHALLENGE MOMENTS:
+- Occasionally (every 3-4 questions), drop a real-world scenario into the conversation
+- Frame it as: "Let me throw a scenario at you..." or "Imagine you're on the job..."
+- Examples: healthcare chatbot safety, financial data hallucination, deployment failure at 2am
+- Evaluate their answer to the scenario as you would any other question`;
+
+// ===================== LLM CALLS =====================
 
 async function callLLM(messages, model = PRIMARY_MODEL) {
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -59,7 +67,7 @@ async function callLLMWithRetry(messages, maxRetries = 2) {
 
       if (isOverloaded) {
         console.log(`Primary model (${PRIMARY_MODEL}) overloaded, falling back to ${FALLBACK_MODEL}`);
-        break; // Exit retry loop, try fallback
+        break;
       }
       if (isRateLimit && attempt < maxRetries) {
         const delay = (attempt + 1) * 2000;
@@ -85,6 +93,8 @@ async function callLLMWithRetry(messages, maxRetries = 2) {
     }
   }
 }
+
+// ===================== CANDIDATE DATA =====================
 
 function buildCandidateSummary(candidate) {
   const m = candidate.member;
@@ -115,6 +125,53 @@ ${failed.map(x => `- Day ${x.day}: ${x.title} (${x.attempts} attempts)`).join('\
 ${skipped.map(x => `- Day ${x.day}: ${x.title}`).join('\n')}`;
 }
 
+// ===================== INTERVIEW STATE =====================
+
+function analyzeConversationState(history) {
+  const assistantMsgs = history.filter(m => m.role === 'assistant');
+  const userMsgs = history.filter(m => m.role === 'user');
+  const questionCount = userMsgs.length;
+
+  // Simple heuristics for state tracking
+  const lastAnswer = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].text : '';
+
+  // Detect struggle signals
+  const struggleSignals = ['idk', "don't know", 'not sure', 'umm', 'uhh', 'maybe', 'i think', "can't remember", 'no idea'];
+  const strongSignals = ['definitely', 'exactly', 'specifically', 'for example', 'in my experience', 'the difference is', 'because'];
+
+  const lastAnswerLower = lastAnswer.toLowerCase();
+  const isStruggling = struggleSignals.some(s => lastAnswerLower.includes(s)) && lastAnswer.length < 150;
+  const isStrong = strongSignals.some(s => lastAnswerLower.includes(s)) && lastAnswer.length > 100;
+
+  // Estimate difficulty level based on performance
+  let difficulty = 'intermediate';
+  if (questionCount <= 3) difficulty = 'warmup';
+  else if (isStrong) difficulty = 'advanced';
+  else if (isStruggling) difficulty = 'foundational';
+
+  // Should we drop a challenge moment?
+  // After question 3, and every 3-4 questions after, with some randomness
+  const shouldChallenge = questionCount >= 3 &&
+    (questionCount === 3 || questionCount === 7 || questionCount === 11);
+
+  return {
+    questionCount,
+    difficulty,
+    isStruggling,
+    isStrong,
+    shouldChallenge,
+    topicsCovered: estimateTopicsCovered(history),
+  };
+}
+
+function estimateTopicsCovered(history) {
+  const assistantTexts = history.filter(m => m.role === 'assistant').map(m => m.text).join(' ');
+  const topicKeywords = ['embedding', 'vector', 'rag', 'prompt', 'fine-tun', 'agent', 'langchain', 'mcp', 'docker', 'security'];
+  return topicKeywords.filter(k => assistantTexts.toLowerCase().includes(k)).length;
+}
+
+// ===================== PROMPTS =====================
+
 function buildStartPrompt(candidateSummary, selectedTopics) {
   const topicsList = selectedTopics.map(t =>
     `- Day ${t.day}: ${t.title} (${t.reason === 'skipped' ? 'SKIPPED' : t.reason === 'failed' ? 'FAILED' : t.reason === 'struggled' ? 'Multiple attempts' : 'Completed'})`
@@ -132,7 +189,7 @@ BEGIN the interview now. Start with a brief, warm welcome (2-3 sentences). Then 
 Remember: Ask ONE question at a time. Keep it conversational.`;
 }
 
-function buildFollowUpPrompt(history, candidateSummary, selectedTopics) {
+function buildFollowUpPrompt(history, candidateSummary, selectedTopics, state) {
   const conversationText = history.map(m =>
     `${m.role === 'user' ? 'Candidate' : 'Interviewer'}: ${m.text}`
   ).join('\n\n');
@@ -155,10 +212,45 @@ function buildFollowUpPrompt(history, candidateSummary, selectedTopics) {
     (topicCoverage[a.day] || 0) - (topicCoverage[b.day] || 0)
   );
   const nextTopics = sortedTopics.slice(0, 2).map(t => `Day ${t.day}: ${t.title}`).join(', ');
-
-  // Count topics covered so far
   const coveredCount = Object.values(topicCoverage).filter(c => c > 0).length;
   const userCount = history.filter(m => m.role === 'user').length;
+
+  let adaptiveInstructions = '';
+
+  if (state.shouldChallenge) {
+    adaptiveInstructions = `
+CHALLENGE MOMENT — Now is the time to introduce a real-world scenario!
+Drop a practical challenge based on what the candidate has discussed. Frame it naturally:
+"Let me throw a scenario at you..." or "Imagine you're building this for a real client..."
+
+Good scenarios:
+- A healthcare chatbot needs to refuse medical advice
+- A RAG system retrieves incorrect legal documents
+- A fine-tuned model starts hallucinating in production
+- An agent framework gets stuck in an infinite loop
+
+Evaluate their scenario answer just like any other question. After the scenario, move to a new topic.`;
+  } else if (state.isStruggling) {
+    adaptiveInstructions = `
+ADAPTIVE MODE: The candidate is struggling.
+- Give them a hint or reframe the question
+- Be encouraging: "That's a good start, let me help you think about it differently..."
+- After giving them a chance, move to a topic they're stronger in
+- Ask simpler, more focused questions`;
+  } else if (state.isStrong) {
+    adaptiveInstructions = `
+ADAPTIVE MODE: The candidate is doing well.
+- Increase difficulty — ask deeper "why" and "how" questions
+- Push for real-world examples: "Can you give me a specific example?"
+- Challenge their assumptions: "What would happen if...?"
+- Move to their weaker topics to test breadth`;
+  } else {
+    adaptiveInstructions = `
+ADAPTIVE MODE: Normal pace.
+- Continue with your planned topic rotation
+- Mix conceptual and practical questions
+- If answer is surface-level, probe deeper`;
+  }
 
   return `You are conducting a technical interview. Here is the conversation so far:
 
@@ -172,14 +264,11 @@ ${topicsList}
 
 Topics covered so far: ${coveredCount} of ${selectedTopics.length}
 Questions asked so far: ${userCount}
+Current difficulty level: ${state.difficulty}
 
 Topics to focus on NEXT (least covered so far): ${nextTopics}
 
-The candidate just answered your question. Based on their response:
-1. If they answered well → acknowledge briefly, then ask about a NEW topic from the list above
-2. If they answered partially → ask a clarifying question on the same topic
-3. If they struggled → be encouraging, give a hint, then move to a different topic
-4. If they gave a short answer → ask them to elaborate
+${adaptiveInstructions}
 
 CRITICAL RULES:
 - Ask exactly ONE question
@@ -191,7 +280,7 @@ ENDING THE INTERVIEW:
 - You MUST ask at least 8 questions total
 - When you have covered all topics AND asked at least 8 questions, end with a warm closing message
 - To signal the interview is over, end your message with exactly: [DONE]
-- Example closing: "Thank you for your time today, ${history[0]?.text?.split(' ')?.[0] || 'Candidate'}. It was a pleasure discussing your experience. [DONE]"
+- Example closing: "Thank you for your time today. It was a pleasure discussing your experience. [DONE]"
 - Do NOT say [DONE] until you have covered at least 4 topics and asked at least 8 questions
 - Be natural and conversational`;
 }
@@ -205,6 +294,10 @@ function buildFeedbackPrompt(history, candidateSummary, selectedTopics) {
     `- Day ${t.day}: ${t.title}`
   ).join('\n');
 
+  // Identify the challenge moment if it exists
+  const challengeIndex = conversationText.indexOf('scenario');
+  const hasChallenge = challengeIndex > -1 || conversationText.toLowerCase().includes('throw a scenario');
+
   return `The interview has concluded. Here is the full conversation:
 
 ${conversationText}
@@ -215,15 +308,25 @@ ${candidateSummary}
 Topics that were covered:
 ${topicsList}
 
+${hasChallenge ? 'Note: This interview included a challenge moment (real-world scenario). Include it in your feedback.' : ''}
+
 Generate a comprehensive interview evaluation. Output ONLY the raw JSON object — no thinking, no markdown, no code fences:
 
 {
   "score": 72,
   "recommendation": "Hire",
+  "confidence": "High",
+  "oneLiner": "Strong on RAG and embeddings, needs work on fine-tuning concepts",
   "summary": "2-3 sentence overall assessment of the candidate's performance",
   "topicBreakdown": [
     {"topic": "Day X: Topic Name", "rating": "Strong", "note": "Specific observation about their answer"}
   ],
+  "challengeMoment": {
+    "question": "The scenario that was presented",
+    "answer": "How the candidate responded",
+    "quality": "Strong/Weak/Partial",
+    "insight": "What this revealed about the candidate"
+  },
   "strengths": ["s1", "s2", "s3"],
   "gaps": ["g1", "g2"],
   "examples": [
@@ -245,10 +348,18 @@ RECOMMENDATION:
 - "Maybe" (55-69): Shows potential but needs development
 - "No Hire" (below 55): Not ready for the role
 
+CONFIDENCE:
+- "High": Clear patterns in answers, confident in assessment
+- "Medium": Mixed signals, some answers hard to evaluate
+- "Low": Candidate was vague, hard to assess accurately
+
 RULES:
 - score must be an integer 0-100
 - recommendation must be one of: "Strong Hire", "Hire", "Maybe", "No Hire"
+- confidence must be one of: "High", "Medium", "Low"
+- oneLiner: one sentence summary, max 15 words
 - topicBreakdown must cover ALL topics that were discussed
+- If there was a challenge moment, include challengeMoment with the scenario and their answer
 - Include 2-3 specific examples of questions and answers
 - Be honest and specific — reference actual things the candidate said
 - strengths: 2-4 items
@@ -257,7 +368,8 @@ RULES:
 - START with the opening curly brace`;
 }
 
-// Curriculum data (inline for serverless)
+// ===================== CURRICULUM =====================
+
 const curriculumDays = [
   { day: 1, title: "VS Code & Python Environment Setup", type: "SETUP" },
   { day: 2, title: "Local LLM & AI Coding Assistant Setup", type: "SETUP" },
@@ -318,17 +430,21 @@ function selectTopics(candidate, numTopics = 6) {
   return scoredDays.slice(0, numTopics);
 }
 
+// ===================== FEEDBACK PARSING =====================
+
 function parseFeedback(text) {
   try {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
       const parsed = JSON.parse(match[0]);
-      // Ensure required fields exist
       return {
         score: parsed.score || 50,
         recommendation: parsed.recommendation || 'Maybe',
+        confidence: parsed.confidence || 'Medium',
+        oneLiner: parsed.oneLiner || '',
         summary: parsed.summary || '',
         topicBreakdown: parsed.topicBreakdown || [],
+        challengeMoment: parsed.challengeMoment || null,
         strengths: parsed.strengths || [],
         gaps: parsed.gaps || [],
         examples: parsed.examples || [],
@@ -339,14 +455,19 @@ function parseFeedback(text) {
   return {
     score: 50,
     recommendation: 'Maybe',
+    confidence: 'Low',
+    oneLiner: 'Assessment based on limited data',
     summary: text,
     topicBreakdown: [],
+    challengeMoment: null,
     strengths: [],
     gaps: [],
     examples: [],
     next: [],
   };
 }
+
+// ===================== HANDLER =====================
 
 const MIN_QUESTIONS = 8;
 
@@ -366,6 +487,9 @@ export default async function handler(req, res) {
     const candidateSummary = buildCandidateSummary(candidate);
     const topics = selectedTopics.length > 0 ? selectedTopics : selectTopics(candidate);
     const userResponseCount = history.filter(m => m.role === 'user').length;
+
+    // Analyze conversation state
+    const state = analyzeConversationState(history);
 
     // Manual end — generate feedback
     if (message === '__END__') {
@@ -393,14 +517,19 @@ export default async function handler(req, res) {
       ];
 
       const reply = await callLLMWithRetry(messages);
-      return res.status(200).json({ reply: reply.trim(), done: false, selectedTopics: topics });
+      return res.status(200).json({
+        reply: reply.trim(),
+        done: false,
+        selectedTopics: topics,
+        state: { difficulty: 'warmup', questionCount: 0 }
+      });
     }
 
-    // Follow-up
+    // Follow-up with adaptive state
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text })),
-      { role: 'user', content: buildFollowUpPrompt(history, candidateSummary, topics) }
+      { role: 'user', content: buildFollowUpPrompt(history, candidateSummary, topics, state) }
     ];
 
     let reply = await callLLMWithRetry(messages);
@@ -436,7 +565,14 @@ export default async function handler(req, res) {
       reply: reply.trim(),
       done: false,
       questionCount: userResponseCount + 1,
-      shouldEnd
+      shouldEnd,
+      state: {
+        difficulty: state.difficulty,
+        questionCount: userResponseCount + 1,
+        isStruggling: state.isStruggling,
+        isStrong: state.isStrong,
+        shouldChallenge: state.shouldChallenge,
+      }
     });
 
   } catch (error) {

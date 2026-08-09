@@ -678,6 +678,12 @@ body {
   color: var(--gray-400);
 }
 
+.score-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .score-excellent { border-color: var(--success); color: var(--success); }
 .score-good { border-color: var(--info); color: var(--info); }
 .score-average { border-color: var(--warning); color: var(--warning); }
@@ -697,6 +703,94 @@ body {
 .rec-no-hire { background: #fef2f2; color: #dc2626; }
 
 [data-theme="dark"] .rec-no-hire { background: #450a0a; }
+
+/* ===== CONFIDENCE BADGE ===== */
+.confidence-badge {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 6px;
+  letter-spacing: 0.01em;
+}
+
+.confidence-high { background: var(--success-bg); color: var(--success); }
+.confidence-medium { background: var(--warning-bg); color: var(--warning); }
+.confidence-low { background: #fef2f2; color: #dc2626; }
+
+[data-theme="dark"] .confidence-low { background: #450a0a; }
+
+/* ===== ONE-LINER ===== */
+.feedback-oneliner {
+  padding: 16px 28px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-600);
+  font-style: italic;
+  border-bottom: 1px solid var(--border);
+  background: var(--gray-50);
+}
+
+/* ===== CHALLENGE MOMENT ===== */
+.challenge-moment-card {
+  background: var(--gray-50);
+  border-radius: 8px;
+  border-left: 3px solid var(--warning);
+  overflow: hidden;
+}
+
+.challenge-scenario, .challenge-response {
+  padding: 14px 16px;
+}
+
+.challenge-scenario {
+  border-bottom: 1px solid var(--border);
+}
+
+.challenge-label {
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-400);
+  display: block;
+  margin-bottom: 6px;
+}
+
+.challenge-scenario p {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--gray-700);
+  line-height: 1.5;
+}
+
+.challenge-response p {
+  font-size: 0.8125rem;
+  color: var(--gray-500);
+  line-height: 1.5;
+}
+
+.challenge-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.challenge-quality {
+  font-size: 0.625rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.challenge-insight {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-style: italic;
+}
 
 /* ===== TOPIC BREAKDOWN ===== */
 .topic-breakdown-list {

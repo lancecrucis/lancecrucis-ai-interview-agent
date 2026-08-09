@@ -27,6 +27,15 @@ export default function FeedbackCard({ candidate, feedback, messages, onBack, th
     }
   }
 
+  const getConfidenceColor = (conf) => {
+    switch (conf) {
+      case 'High': return 'confidence-high'
+      case 'Medium': return 'confidence-medium'
+      case 'Low': return 'confidence-low'
+      default: return 'confidence-medium'
+    }
+  }
+
   return (
     <div className="feedback-page">
       <div className="feedback-header">
@@ -48,10 +57,24 @@ export default function FeedbackCard({ candidate, feedback, messages, onBack, th
               <span className="score-number">{feedback.score}</span>
               <span className="score-label">/100</span>
             </div>
-            <div className={`recommendation-badge ${getRecColor(feedback.recommendation)}`}>
-              {feedback.recommendation}
+            <div className="score-meta">
+              <div className={`recommendation-badge ${getRecColor(feedback.recommendation)}`}>
+                {feedback.recommendation}
+              </div>
+              {feedback.confidence && (
+                <div className={`confidence-badge ${getConfidenceColor(feedback.confidence)}`}>
+                  Confidence: {feedback.confidence}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* One-Liner */}
+          {feedback.oneLiner && (
+            <div className="feedback-oneliner">
+              {feedback.oneLiner}
+            </div>
+          )}
 
           {/* Summary */}
           <div className="feedback-section">
@@ -73,6 +96,31 @@ export default function FeedbackCard({ candidate, feedback, messages, onBack, th
                     {topic.note && <p className="topic-breakdown-note">{topic.note}</p>}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Challenge Moment */}
+          {feedback.challengeMoment && (
+            <div className="feedback-section">
+              <h3>Challenge Moment</h3>
+              <div className="challenge-moment-card">
+                <div className="challenge-scenario">
+                  <span className="challenge-label">Scenario</span>
+                  <p>{feedback.challengeMoment.question}</p>
+                </div>
+                <div className="challenge-response">
+                  <span className="challenge-label">Candidate Response</span>
+                  <p>{feedback.challengeMoment.answer}</p>
+                </div>
+                <div className="challenge-footer">
+                  <span className={`challenge-quality ${getRatingColor(feedback.challengeMoment.quality)}`}>
+                    {feedback.challengeMoment.quality}
+                  </span>
+                  {feedback.challengeMoment.insight && (
+                    <span className="challenge-insight">{feedback.challengeMoment.insight}</span>
+                  )}
+                </div>
               </div>
             </div>
           )}
