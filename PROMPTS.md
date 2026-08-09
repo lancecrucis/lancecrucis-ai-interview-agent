@@ -154,19 +154,15 @@ yes please do so, but dont add the github part thank you
 **Date:** August 9, 2026
 
 ```
-do another checklist of how my project will do in the hackathon will it win,
-finds holes if you must
+do another checklist finds holes if you must
 ```
 
 ```
-im solo, deadline is aug 9 8:00pm ist. add the latest prompt that contribute
-to development in the prompt.md and update my github readme with the live demo
-
-Hole 3: Interview Might Not End Properly
+Hole: Interview Might Not End Properly
 make the safety cap is at 13 questions, add a timeout, put a visual que of
 ai response time
 
-Hole 6: No Loading State on Feedback
+Hole: No Loading State on Feedback
 fix these thanks
 ```
 
