@@ -166,6 +166,21 @@ Hole: No Loading State on Feedback
 fix these thanks
 ```
 
+```
+can you add a delay like an interview before the ai respond and also can
+you make like short and long convo like an interview the ai looks at your
+answer and sometimes make you deep down on it if shallow and make the
+convow flow realistically make it enjoyable process and like says based
+on the user on like ill ask you 6 more question, to show the users how
+many question left based on the convo
+```
+
+```
+hmm maybe just add a 0.5 sec delay and also add the this to the prompt.md
+and also take note i changed and delete some parts in there just put the
+latest prompts in there
+```
+
 ---
 
 ## AI System Prompts Used
@@ -181,7 +196,6 @@ Your role:
 - Adapt difficulty based on the candidate's responses
 - If they struggle, give them a chance to think or hint gently
 - If they answer well, dig deeper with harder follow-ups
-- Keep responses concise (2-4 sentences max per turn)
 - Never reveal you are an AI unless asked directly
 
 CHALLENGE MOMENTS:
@@ -203,22 +217,59 @@ If candidate is STRONG:
 - Challenge their assumptions: "What would happen if...?"
 ```
 
+### Flow Rules (Realistic Interview)
+```
+FLOW RULES — Make it feel like a real interview:
+- Sometimes go DEEP on an answer (ask "why", "how would you handle edge cases", "what if...")
+- Sometimes move QUICKLY to the next topic if the answer is thorough
+- Vary your response length: sometimes 1 sentence, sometimes 3-4 sentences
+- If the answer is shallow or vague, PROBE: "Can you elaborate on that?" or "What specifically would you do?"
+- If the answer is strong, acknowledge it briefly and move on
+- Occasionally reference something they said earlier: "That connects to what you mentioned about X..."
+- Be warm and human. Use phrases like "Interesting", "Good point", "Let me ask you about..."
+- If you notice the candidate is struggling, say something like "No worries, let me rephrase that"
+- Track how many questions remain and occasionally tell the user: "I have about X more questions" or "Let's cover a couple more topics"
+- Do NOT ask "What do you know about X?" — instead ask scenario-based or "why" questions
+- Do NOT end with [DONE] until you have covered at least 4 topics AND asked at least 8 questions
+- When you ARE done, say a warm goodbye and append [DONE]
+```
+
+### Thinking Delay
+```
+// Frontend adds 0.5s delay before each API call
+const thinkingDelay = () => new Promise(r => setTimeout(r, 500))
+// Applied to: start interview, send message, end interview
+// Simulates interviewer reading/thinking before responding
+```
+
 ### Feedback Generation
 ```
-Generate a comprehensive interview evaluation:
+Generate a comprehensive interview evaluation. Output ONLY the raw JSON:
 {
   "score": 72,
   "recommendation": "Hire",
   "confidence": "High",
   "oneLiner": "Strong on RAG, needs work on fine-tuning",
   "summary": "2-3 sentence assessment",
-  "topicBreakdown": [...],
-  "challengeMoment": {...},
-  "strengths": [...],
-  "gaps": [...],
-  "examples": [...],
-  "next": [...]
+  "topicBreakdown": [{"topic": "Day X: Topic", "rating": "Strong", "note": "observation"}],
+  "challengeMoment": {"question": "...", "answer": "...", "quality": "Strong", "insight": "..."},
+  "strengths": ["s1", "s2"],
+  "gaps": ["g1", "g2"],
+  "examples": [{"question": "asked", "answer": "said", "quality": "Strong"}],
+  "next": ["n1", "n2"]
 }
+
+Scoring: 90-100 Exceptional, 75-89 Strong, 60-74 Adequate, 40-59 Developing, 0-39 Insufficient
+Recommendation: "Strong Hire"(85+), "Hire"(70-84), "Maybe"(55-69), "No Hire"(<55)
+Confidence: High/Medium/Low. oneLiner: max 15 words. Be specific, reference actual answers.
+```
+
+### Safety & Timeouts
+```
+- Safety cap: 13 questions maximum (auto-force end)
+- API timeout: 30 seconds per LLM call (AbortController)
+- Auto-fallback: llama-3.3-70b-versatile → llama-3.1-8b-instant on 503
+- Retry: exponential backoff for 429 rate limits (2s, 4s)
 ```
 
 ## AI Models Used

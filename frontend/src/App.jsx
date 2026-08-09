@@ -36,7 +36,7 @@ function App() {
     setSelectedTopics([])
   }
 
-  const thinkingDelay = () => new Promise(r => setTimeout(r, 1500 + Math.random() * 1500))
+  const thinkingDelay = () => new Promise(r => setTimeout(r, 500))
 
   const handleStartInterview = async () => {
     setIsLoading(true)
