@@ -4,6 +4,7 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const [elapsed, setElapsed] = useState(0)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -12,6 +13,15 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
   useEffect(() => {
     if (!isLoading && inputRef.current) {
       inputRef.current.focus()
+    }
+  }, [isLoading])
+
+  // Timer for AI thinking time
+  useEffect(() => {
+    if (isLoading) {
+      setElapsed(0)
+      const interval = setInterval(() => setElapsed(e => e + 1), 1000)
+      return () => clearInterval(interval)
     }
   }, [isLoading])
 
@@ -24,6 +34,10 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
   }
 
   const questionCount = messages.filter(m => m.role === 'user').length
+
+  // Detect if we're generating feedback (last message was user's final answer)
+  const lastMsg = messages[messages.length - 1]
+  const isGeneratingFeedback = isLoading && lastMsg?.role === 'user'
 
   return (
     <div className="chat-container">
@@ -75,9 +89,23 @@ export default function ChatWindow({ candidate, messages, isLoading, onSend, onE
         {isLoading && (
           <div className="message assistant">
             <div className="message-content">
-              <div className="typing-indicator">
-                <span></span><span></span><span></span>
-              </div>
+              {isGeneratingFeedback ? (
+                <div className="feedback-loading">
+                  <div className="feedback-loading-text">
+                    <span className="typing-dots"><span></span><span></span><span></span></span>
+                    Generating feedback...
+                  </div>
+                  <div className="feedback-loading-sub">Analyzing your interview performance</div>
+                  <div className="feedback-loading-timer">{elapsed}s</div>
+                </div>
+              ) : (
+                <div className="thinking-loading">
+                  <div className="typing-indicator">
+                    <span></span><span></span><span></span>
+                  </div>
+                  <span className="thinking-timer">{elapsed}s</span>
+                </div>
+              )}
             </div>
           </div>
         )}

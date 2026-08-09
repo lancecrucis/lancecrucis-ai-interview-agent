@@ -2,6 +2,8 @@
 
 An AI-powered technical interview agent that conducts personalized, multi-turn interviews for graduates of a 31-day AI Cohort program.
 
+**Live Demo:** [lancecrucis-ai-interview-agent-lcag.vercel.app](https://lancecrucis-ai-interview-agent-lcag.vercel.app)
+
 ## What It Does
 
 The AI Interview Agent analyzes a candidate's learning journey and conducts a realistic technical interview that:
