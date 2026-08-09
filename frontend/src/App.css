@@ -166,7 +166,7 @@ body {
   border-color: var(--gray-900);
 }
 
-.dark .filter-pill.active {
+[data-theme="dark"] .filter-pill.active {
   background: var(--gray-100);
   color: var(--gray-900);
   border-color: var(--gray-100);

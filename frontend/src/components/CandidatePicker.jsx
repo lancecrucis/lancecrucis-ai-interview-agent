@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 
 const SORT_OPTIONS = [
+  { value: 'default', label: 'Default' },
   { value: 'name-asc', label: 'Name A→Z' },
   { value: 'name-desc', label: 'Name Z→A' },
   { value: 'exp-desc', label: 'Experience (High→Low)' },
@@ -20,7 +21,7 @@ const FILTER_OPTIONS = [
 
 export default function CandidatePicker({ candidates, onSelect, theme, onToggleTheme }) {
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('name-asc')
+  const [sortBy, setSortBy] = useState('default')
   const [filterBy, setFilterBy] = useState('all')
 
   const getStats = (candidate) => {
@@ -86,8 +87,9 @@ export default function CandidatePicker({ candidates, onSelect, theme, onToggleT
     }
 
     // Sort
-    result = [...result].sort((a, b) => {
-      switch (sortBy) {
+    if (sortBy !== 'default') {
+      result = [...result].sort((a, b) => {
+        switch (sortBy) {
         case 'name-asc': return a.member.name.localeCompare(b.member.name)
         case 'name-desc': return b.member.name.localeCompare(a.member.name)
         case 'exp-desc': return b.member.yearsExperience - a.member.yearsExperience
@@ -106,6 +108,7 @@ export default function CandidatePicker({ candidates, onSelect, theme, onToggleT
         default: return 0
       }
     })
+    }
 
     return result
   }, [candidates, search, sortBy, filterBy])
