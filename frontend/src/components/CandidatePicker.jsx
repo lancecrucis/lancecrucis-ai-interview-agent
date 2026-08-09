@@ -127,7 +127,7 @@ export default function CandidatePicker({ candidates, onSelect, theme, onToggleT
         <div className="search-box">
           <input
             type="text"
-            placeholder="Search by name, role, or education..."
+            placeholder="Search by name or role..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
