@@ -166,6 +166,12 @@ body {
   border-color: var(--gray-900);
 }
 
+.dark .filter-pill.active {
+  background: var(--gray-100);
+  color: var(--gray-900);
+  border-color: var(--gray-100);
+}
+
 .picker-results {
   font-size: 0.75rem;
   color: var(--gray-400);
